@@ -22,7 +22,7 @@ This solution was developed with the assistance of an LLM (Large Language Model)
   * **Full Date Restoration:** Prioritizes the `photoTakenTime` from the JSON to restore the true creation date of the media.
   * **Video Support:** Correctly writes date and description tags for video files (`.mp4`, `.mov`) using the QuickTime and Track metadata fields.
   * **Location and Description:** Restores both GPS coordinates (Latitude/Longitude) and any user-added descriptions/captions.
-  * **Fallback Logic:** Attempts to parse dates directly from common timestamp-based filenames if the JSON file is missing or corrupted.
+  * **Fallback Logic (Enhanced):** Attempts to parse dates directly from common timestamp-based filenames if the JSON file is missing or corrupted. **The script now correctly recognizes dates separated by an underscore (`_`) in filenames (e.g., `YYYYMMDD_HHMMSS`) and uses an unambiguous date format for successful parsing.**
 
 -----
 
@@ -40,18 +40,16 @@ To run the script, you must define the paths for your photo directory and the Ex
 
 ### Step 1: Download and Modify the Script
 
-1.  Download the `Invoke-GPhotosMetadataFix.ps1` file.
+1.  Download the **`Invoke-GPhotosMetadataFix.ps1`** file.
 2.  Open the file in a text editor (like VS Code, Notepad++, or Windows PowerShell ISE).
 3.  Locate the `param` block at the very top of the script:
-
-<!-- end list -->
 
 ```powershell
 param (
     [string]$PhotoRoot = "D:\Downloads\Takeout\Google Photos\Photos from 2020\New folder",
     [string]$ExifToolPath = "D:\Applications\exiftool\exiftool.exe"
 )
-```
+````
 
 ### Step 2: Set the Photo Root Directory
 
@@ -76,7 +74,7 @@ You can run the script using either **PowerShell** or **Command Prompt (CMD)**.
 #### **Option A: Running via PowerShell**
 
 1.  Open **PowerShell** (search for it in the Start Menu).
-2.  Navigate to the directory where you saved the `Invoke-GPhotosMetadataFix.ps1` script:
+2.  Navigate to the directory where you saved the **`Invoke-GPhotosMetadataFix.ps1`** script:
     ```powershell
     cd C:\path\to\your\script\
     ```
@@ -94,3 +92,18 @@ You can run the script using either **PowerShell** or **Command Prompt (CMD)**.
     ```
 
 The script will begin recursively scanning the photo root directory and display the actions it performs on each file, including any restored dates or GPS coordinates.
+
+-----
+
+## Tags Written to Media
+
+The script writes the following metadata tags based on the file type:
+
+| Data Type | Image Files (.jpg, .png) | Video Files (.mp4, .mov) |
+| :--- | :--- | :--- |
+| **Date/Time** | `EXIF:DateTimeOriginal`, `EXIF:CreateDate`, `EXIF:ModifyDate`, `XMP:CreateDate`, `XMP:DateCreated` | `QuickTime:CreateDate`, `QuickTime:ModifyDate`, `TrackCreateDate`, `TrackModifyDate`, `MediaCreateDate`, `MediaModifyDate` |
+| **Description** | `ImageDescription`, `XMP:Description` | `XMP:Description`, `QuickTime:Comment` |
+| **GPS** | `EXIF:GPSLatitude`, `EXIF:GPSLongitude`, `EXIF:GPSAltitude` | `EXIF:GPSLatitude`, `EXIF:GPSLongitude`, `EXIF:GPSAltitude` |
+
+```
+```
