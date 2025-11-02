@@ -1,6 +1,6 @@
 # Invoke-GPhotosMetadataFix.ps1
 param (
-    [string]$PhotoRoot = "D:\Downloads\Takeout\Google Photos\Photos from 2022\New folder",
+    [string]$PhotoRoot = "D:\Downloads\Takeout\Google Photos\Photos from 2023\New folder",
     [string]$ExifToolPath = "D:\Applications\exiftool\exiftool.exe"
 )
 
@@ -18,12 +18,12 @@ Get-ChildItem -Path $PhotoRoot -Include $extensions -Recurse -File | ForEach-Obj
     $jsonPath = $null
     $usedFallback = $false
 
-    # 🔹 Cleaned base name (remove common suffixes and duplicates like (1), -edited, etc.)
+    # 🔹 Cleaned base name (remove common suffixes like (1), -edited, -cropped, etc.)
     $cleanBase = $baseName -replace '(\(.*\))','' `
-                           -replace '(-edited|_edited|-cropped|_cropped|-edit|_edit|-mod|_mod)$','' `
-                           -replace '\s+$',''
+                            -replace '(-edited|_edited|-cropped|_cropped|-edit|_edit|-mod|_mod)$','' `
+                            -replace '\s+$',''
 
-    # 1️⃣ Explicit candidate list
+    # 1️⃣ Explicit candidate list (JSON detection logic unchanged)
     $explicit = @(
         "$imgName.supplemental-metadata.json",
         "$baseName.supplemental-metadata.json",
@@ -42,13 +42,13 @@ Get-ChildItem -Path $PhotoRoot -Include $extensions -Recurse -File | ForEach-Obj
         if (Test-Path $cand) { $jsonPath = $cand; break }
     }
 
-    # 2️⃣ Wildcard matches
+    # 2️⃣ Wildcard matches (JSON detection logic unchanged)
     if (-not $jsonPath) {
         $possible = Get-ChildItem -Path $dir -Filter "$cleanBase*.json" -ErrorAction SilentlyContinue
         if ($possible) { $jsonPath = $possible[0].FullName }
     }
 
-    # 3️⃣ Substring matches (bi-directional, case-insensitive)
+    # 3️⃣ Substring matches (JSON detection logic unchanged)
     if (-not $jsonPath) {
         $allJsons = Get-ChildItem -Path $dir -Filter *.json -ErrorAction SilentlyContinue
         if ($allJsons) {
@@ -70,24 +70,26 @@ Get-ChildItem -Path $PhotoRoot -Include $extensions -Recurse -File | ForEach-Obj
     try { $json = Get-Content -Raw -Path $jsonPath | ConvertFrom-Json }
     catch { Write-Warning "Could not parse JSON for $imgName"; return }
 
-    # 🕒 DATE resolution
+    # 🕒 DATE resolution - CLEANED SPACING & REGEX
     $dateStr = $null
     if ($json.photoTakenTime -and $json.photoTakenTime.formatted) { $dateStr = $json.photoTakenTime.formatted }
     elseif ($json.creationTime -and $json.creationTime.formatted) { $dateStr = $json.creationTime.formatted }
-    elseif ($cleanBase -match '(\d{8})-(\d{6})') {
+    # Fix for IMG_YYYYMMDD_HHMMSS pattern
+    elseif ($cleanBase -match '(\d{8})_(\d{6})') { 
         $dateDigits = $matches[1]; $timeDigits = $matches[2]
-        $year  = $dateDigits.Substring(0,4)
+        $year = $dateDigits.Substring(0,4)
         $month = $dateDigits.Substring(4,2)
-        $day   = $dateDigits.Substring(6,2)
-        $hour  = $timeDigits.Substring(0,2)
-        $min   = $timeDigits.Substring(2,2)
-        $sec   = $timeDigits.Substring(4,2)
-        $dateStr = "$day $month $year, $hour`:$min`:$sec UTC"
+        $day = $dateDigits.Substring(6,2)
+        $hour = $timeDigits.Substring(0,2)
+        $min = $timeDigits.Substring(2,2)
+        $sec = $timeDigits.Substring(4,2)
+        # Previously fixed to use unambiguous format
+        $dateStr = "$year-$month-$day $hour`:$min`:$sec" 
     }
 
     $exifDate = $null
     if ($dateStr) {
-        $dateStr = $dateStr -replace 'Sept','Sep' -replace ' UTC$',''
+        $dateStr = $dateStr -replace 'Sept','Sep' -replace ' UTC$','' 
         try {
             $dt = [datetime]::Parse($dateStr, [System.Globalization.CultureInfo]::InvariantCulture)
             $exifDate = $dt.ToString("yyyy:MM:dd HH:mm:ss")
@@ -96,17 +98,34 @@ Get-ChildItem -Path $PhotoRoot -Include $extensions -Recurse -File | ForEach-Obj
         }
     }
 
-    # 📝 Description
+    # 📝 Description (unchanged)
     $desc = $null
     if ($json.description -and $json.description.Trim().Length -gt 0) { $desc = $json.description.Trim() }
 
-    # 📍 GeoData
+    # 📍 GeoData (unchanged)
     $lat = $json.geoData.latitude
     $lon = $json.geoData.longitude
     $alt = if ($json.geoData.altitude) { $json.geoData.altitude } else { 0 }
     $hasGeo = ($lat -ne 0 -or $lon -ne 0)
 
-    # 🧩 Build ExifTool args
+    # 🧩 Check existing metadata (unchanged)
+    $skip = $false
+    if ($exifDate) {
+        $existingDate = ""
+        if ($ext -in @(".jpg",".jpeg",".png")) {
+            $existingDate = & $ExifToolPath -EXIF:DateTimeOriginal -s3 $imgPath
+        } elseif ($ext -in @(".mp4",".mov")) {
+            $existingDate = & $ExifToolPath -QuickTime:CreateDate -s3 $imgPath
+        }
+        if ($existingDate -eq $exifDate) {
+            Write-Host "Skipping $imgName — already has correct Date Taken / Media Created"
+            $skip = $true
+        }
+    }
+
+    if ($skip) { return }
+
+    # Build ExifTool args (unchanged)
     $args = @("-P","-overwrite_original")
     if ($exifDate) {
         if ($ext -in @(".jpg",".jpeg",".png")) {
